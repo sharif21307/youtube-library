@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html[lang="ar"],
+  html[lang="ar"] * {
+    font-family: 'Noto Sans Arabic', Arial, sans-serif;
+  }
+
+  html[lang="en"],
+  html[lang="en"] * {
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  body {
+    @apply antialiased;
+  }
+}
