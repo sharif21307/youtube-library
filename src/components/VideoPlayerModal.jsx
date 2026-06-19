@@ -35,28 +35,33 @@ function RemoveBtn({ onClick }) {
   )
 }
 
+// Safely coerce a jsonb value to a non-null array
+function toArr(raw) {
+  return Array.isArray(raw) ? raw : []
+}
+
 export default function VideoPlayerModal({ video, onClose }) {
   const { t } = useLang()
 
   const [activeTab, setActiveTab] = useState('notes')
 
   // Notes
-  const [notes, setNotes]           = useState('')
-  const [notesDirty, setNotesDirty] = useState(false)
+  const [notes, setNotes]             = useState('')
+  const [notesDirty, setNotesDirty]   = useState(false)
   const [notesSaving, setNotesSaving] = useState(false)
-  const [notesSaved, setNotesSaved] = useState(false)
+  const [notesSaved, setNotesSaved]   = useState(false)
 
-  // Prompts
-  const [prompts, setPrompts]   = useState([])
-  const [newPrompt, setNewPrompt] = useState('')
-  const [copiedIdx, setCopiedIdx] = useState(null)
+  // Prompts — each item: { text: string, createdAt: string }
+  const [prompts, setPrompts]       = useState([])
+  const [newPrompt, setNewPrompt]   = useState('')
+  const [copiedIdx, setCopiedIdx]   = useState(null)
 
-  // Links
+  // Links — each item: { url: string, label: string, createdAt: string }
   const [links, setLinks]           = useState([])
-  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkUrl, setNewLinkUrl]   = useState('')
   const [newLinkLabel, setNewLinkLabel] = useState('')
 
-  // Fetch fresh data (includes notes, prompts, links)
+  // Fetch fresh data (select * so any column set works regardless of migration state)
   useEffect(() => {
     async function load() {
       const { data } = await supabase
@@ -66,9 +71,8 @@ export default function VideoPlayerModal({ video, onClose }) {
         .single()
       if (data) {
         setNotes(data.notes ?? '')
-        setPrompts(Array.isArray(data.prompts) ? data.prompts : [])
-        const raw = data.links
-        setLinks(Array.isArray(raw) ? raw : [])
+        setPrompts(toArr(data.prompts))
+        setLinks(toArr(data.links))
       }
     }
     load()
@@ -101,7 +105,8 @@ export default function VideoPlayerModal({ video, onClose }) {
   const handleAddPrompt = async () => {
     const text = newPrompt.trim()
     if (!text) return
-    const next = [...prompts, text]
+    const entry = { text, createdAt: new Date().toISOString() }
+    const next = [...prompts, entry]
     setPrompts(next)
     setNewPrompt('')
     await supabase.from('videos').update({ prompts: next }).eq('id', video.id)
@@ -114,7 +119,7 @@ export default function VideoPlayerModal({ video, onClose }) {
   }
 
   const handleCopyPrompt = (idx) => {
-    navigator.clipboard.writeText(prompts[idx]).then(() => {
+    navigator.clipboard.writeText(prompts[idx].text).then(() => {
       setCopiedIdx(idx)
       setTimeout(() => setCopiedIdx(null), 2000)
     })
@@ -124,8 +129,8 @@ export default function VideoPlayerModal({ video, onClose }) {
   const handleAddLink = async () => {
     const url = newLinkUrl.trim()
     if (!url) return
-    const label = newLinkLabel.trim() || url
-    const next = [...links, { url, label }]
+    const entry = { url, label: newLinkLabel.trim() || url, createdAt: new Date().toISOString() }
+    const next = [...links, entry]
     setLinks(next)
     setNewLinkUrl('')
     setNewLinkLabel('')
@@ -150,7 +155,7 @@ export default function VideoPlayerModal({ video, onClose }) {
                    max-h-[90dvh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close button — RTL-safe */}
+        {/* Close — RTL-safe */}
         <button
           onClick={onClose}
           title={t.close}
@@ -250,14 +255,14 @@ export default function VideoPlayerModal({ video, onClose }) {
                   )}
 
                   <div className="space-y-2">
-                    {prompts.map((prompt, idx) => (
-                      <div key={idx} className="flex gap-2 items-start">
+                    {prompts.map((item, idx) => (
+                      <div key={item.createdAt ?? idx} className="flex gap-2 items-start">
                         <pre
                           className="flex-1 bg-gray-800 border border-gray-700 rounded-xl
                                      px-3 py-2.5 text-xs text-gray-200 whitespace-pre-wrap
                                      font-mono overflow-x-auto"
                         >
-                          {prompt}
+                          {item.text}
                         </pre>
                         <div className="flex flex-col gap-1.5 shrink-0">
                           <button
@@ -285,7 +290,7 @@ export default function VideoPlayerModal({ video, onClose }) {
                     ))}
                   </div>
 
-                  {/* Add prompt input */}
+                  {/* Add prompt */}
                   <div className="flex gap-2 pt-2 border-t border-gray-700/60">
                     <textarea
                       value={newPrompt}
@@ -322,10 +327,10 @@ export default function VideoPlayerModal({ video, onClose }) {
                   )}
 
                   <div className="space-y-2">
-                    {links.map((link, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                    {links.map((item, idx) => (
+                      <div key={item.createdAt ?? idx} className="flex items-center gap-2">
                         <a
-                          href={link.url}
+                          href={item.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl
@@ -337,8 +342,8 @@ export default function VideoPlayerModal({ video, onClose }) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                               d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                           </svg>
-                          <span className="text-sm text-primary-400 hover:text-primary-300 truncate">
-                            {link.label || link.url}
+                          <span className="text-sm text-primary-400 truncate">
+                            {item.label || item.url}
                           </span>
                         </a>
                         <RemoveBtn onClick={() => handleRemoveLink(idx)} />
@@ -346,7 +351,7 @@ export default function VideoPlayerModal({ video, onClose }) {
                     ))}
                   </div>
 
-                  {/* Add link inputs */}
+                  {/* Add link */}
                   <div className="pt-2 border-t border-gray-700/60 space-y-2">
                     <input
                       type="url"
